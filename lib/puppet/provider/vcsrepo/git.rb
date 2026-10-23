@@ -126,17 +126,15 @@ Puppet::Type.type(:vcsrepo).provide(:git, parent: Puppet::Provider::Vcsrepo) do
   end
 
   def working_copy_exists?
-    # NOTE: a change in the `default_url` will tell the type that this repo
-    # doesn't exist (i.e. it triggers a "not the same repository" error).
-    # Thus, changing the `source` property from a string to a string (which
-    # changes the origin url), or if the @resource.value(:remote)'s url is
-    # changed, the provider will require force.
+    # NOTE: a change in the `source` url is not treated as a different
+    # repository; the `source` property is updated in place via `source=`.
     return false unless File.directory?(File.join(@resource.value(:path), '.git'))
 
     at_path do
       if @resource.value(:source)
         begin
-          return git_with_identity('config', '--get', "remote.#{@resource.value(:remote)}.url").chomp == default_url
+          git_with_identity('config', '--get', "remote.#{@resource.value(:remote)}.url")
+          return true
         rescue Puppet::ExecutionFailure
           return false
         end
@@ -195,13 +193,6 @@ Puppet::Type.type(:vcsrepo).provide(:git, parent: Puppet::Provider::Vcsrepo) do
   end
 
   def source=(desired)
-    # NOTE: a change in the `default_url` will tell the type that this repo
-    # doesn't exist (i.e. it triggers a "not the same repository" error).
-    # Thus, a change from a string to a string (which changes the origin url),
-    # or if the @resource.value(:remote)'s url is changed, the provider will
-    # require force, without ever reaching this block. The recreation is
-    # duplicated here in case something changes in the `working_copy_exists?`
-    # logic.
     current = source
     if current.is_a?(Hash)
       current.each_key do |remote|
@@ -209,11 +200,7 @@ Puppet::Type.type(:vcsrepo).provide(:git, parent: Puppet::Provider::Vcsrepo) do
         remove_remote(remote) if desired.is_a?(String) && remote != @resource.value(:remote)
       end
     end
-    if current.is_a?(String) && desired.is_a?(String)
-      create # recreate
-    else
-      update_remotes(desired)
-    end
+    update_remotes(desired)
   end
 
   def update_remotes(remotes)

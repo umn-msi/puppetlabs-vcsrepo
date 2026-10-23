@@ -510,14 +510,16 @@ BRANCHES
 
   context 'when updating remotes' do
     context 'when with string to string' do
-      it 'fails' do
+      it 'updates the origin remote in place' do
+        expect_chdir
         resource[:source] = 'git://git@foo.com/bar.git'
-        resource[:force] = false
-
         expect(provider).to receive(:source).and_return('git://git@foo.com/foo.git')
-        expect(provider).to receive(:path_exists?).and_return(true)
-        expect(provider).to receive(:path_empty?).and_return(false)
-        expect { provider.source = resource.value(:source) }.to raise_error(Puppet::Error)
+        expect(provider).not_to receive(:create)
+        expect(provider).not_to receive(:destroy)
+        expect(provider).to receive(:exec_git).with('config', '-l').and_return("remote.origin.url=git://git@foo.com/foo.git\n")
+        expect(provider).to receive(:exec_git).with('remote', 'set-url', 'origin', 'git://git@foo.com/bar.git')
+        expect(provider).to receive(:exec_git).with('remote', 'update')
+        provider.source = resource.value(:source)
       end
     end
 
@@ -772,6 +774,27 @@ BRANCHES
         expect(provider).to receive(:exec_git).with('branch', '--no-color', '-a').and_return(branch_a_list(resource.value(:revision)))
         expect(provider).to receive(:update_submodules)
         provider.create
+      end
+    end
+  end
+  describe 'changing the source' do
+    before :each do
+      allow(Dir).to receive(:chdir).with('/tmp/test').and_yield
+    end
+
+    describe '#working_copy_exists?' do
+      before :each do
+        allow(File).to receive(:directory?).with('/tmp/test/.git').and_return(true)
+      end
+
+      it 'is true when the remote url differs from the desired source' do
+        expect(provider).to receive(:git_with_identity).with('config', '--get', 'remote.origin.url').and_return("git@other-repo\n")
+        expect(provider.working_copy_exists?).to be true
+      end
+
+      it 'is false when the remote does not exist' do
+        expect(provider).to receive(:git_with_identity).with('config', '--get', 'remote.origin.url').and_raise(Puppet::ExecutionFailure, 'no remote')
+        expect(provider.working_copy_exists?).to be false
       end
     end
   end
