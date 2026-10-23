@@ -352,6 +352,7 @@ BRANCHES
       expect_chdir('/tmp/test')
       resource[:source] = 'http://example.com'
       allow(provider).to receive(:exec_git).with('config', 'remote.origin.url').and_return('')
+      allow(provider).to receive(:update_remotes)
       allow(provider).to receive(:exec_git).with('fetch', 'origin') # FIXME
       allow(provider).to receive(:exec_git).with('fetch', '--tags', 'origin')
       allow(provider).to receive(:exec_git).with('rev-parse', 'HEAD').and_return('currentsha')
@@ -375,6 +376,17 @@ BRANCHES
         expect(provider).to receive(:exec_git).with('rev-parse', '--revs-only', resource.value(:revision)).and_return('othersha')
         expect(provider).to receive(:update_references)
         expect(provider.revision).to eq('currentsha')
+      end
+    end
+
+    context 'when the source has changed' do
+      it 'updates the remotes before fetching' do
+        resource[:revision] = 'othersha'
+        allow(provider).to receive(:exec_git).with('branch', '--no-color', '-a').and_return(branch_a_list)
+        allow(provider).to receive(:exec_git).with('rev-parse', '--revs-only', resource.value(:revision)).and_return('othersha')
+        expect(provider).to receive(:update_remotes).with('http://example.com').ordered
+        expect(provider).to receive(:update_references).ordered
+        provider.revision
       end
     end
 

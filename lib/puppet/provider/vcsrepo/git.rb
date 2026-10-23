@@ -586,7 +586,13 @@ Puppet::Type.type(:vcsrepo).provide(:git, parent: Puppet::Provider::Vcsrepo) do
       return current
     end
 
-    update_references if @resource.value(:source)
+    if @resource.value(:source)
+      # Puppet retrieves every property before syncing any of them, so point
+      # the remotes at the desired source before fetching, otherwise the fetch
+      # would go to the old (possibly unreachable) url.
+      update_remotes(@resource.value(:source))
+      update_references
+    end
     if @resource.value(:revision)
       canonical = if tag_revision?
                     # git-rev-parse will give you the hash of the tag object itself rather
